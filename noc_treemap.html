@@ -203,7 +203,7 @@
     #chart-container {
       position: relative;
       width: 100%;
-      height: calc(100vh - 228px);
+      height: calc(100vh - 250px);
       min-height: 480px;
     }
     #treemap-svg {
@@ -347,6 +347,49 @@
       line-height: 1.5;
       flex-shrink: 0;
     }
+    .stat-breakdown {
+      padding: 10px 28px 10px 0;
+    }
+    .breakdown-title {
+      font-size: 9px;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      color: #3a3e54;
+      margin-bottom: 7px;
+    }
+    .breakdown-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .breakdown-row:last-child { margin-bottom: 0; }
+    .br-label {
+      font-size: 10px;
+      color: #5a5e74;
+      width: 62px;
+      flex-shrink: 0;
+    }
+    .br-bar-wrap {
+      width: 56px;
+      height: 5px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .br-bar {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.5s ease;
+    }
+    .br-val {
+      font-size: 11px;
+      font-weight: 600;
+      color: #c0c4dc;
+      width: 22px;
+      text-align: right;
+      flex-shrink: 0;
+    }
 
     /* ── Hint ── */
     .hint {
@@ -372,7 +415,30 @@
   <div class="stat-card"><span class="stat-num accent" id="stat-wages">—</span><span class="stat-label">in annual wages<br>at high AI exposure (&gt;50)</span></div>
   <div class="stat-card"><span class="stat-num" id="stat-workers">—</span><span class="stat-label">Canadians in<br>high-exposure roles</span></div>
   <div class="stat-card"><span class="stat-num" id="stat-pct">—</span><span class="stat-label">of the total<br>workforce</span></div>
-  <div id="stat-byline">AI score &gt; 50 / 100<br>Wages = hourly × 2,080 hrs</div>
+
+  <div class="stat-card stat-breakdown">
+    <div class="breakdown-title">Exposure by Salary</div>
+    <div class="breakdown-row"><span class="br-label">&lt;$22/hr</span><div class="br-bar-wrap"><div class="br-bar" id="bb-sal-lo"></div></div><span class="br-val" id="bv-sal-lo">—</span></div>
+    <div class="breakdown-row"><span class="br-label">$22–$40</span><div class="br-bar-wrap"><div class="br-bar" id="bb-sal-mi"></div></div><span class="br-val" id="bv-sal-mi">—</span></div>
+    <div class="breakdown-row"><span class="br-label">&gt;$40/hr</span><div class="br-bar-wrap"><div class="br-bar" id="bb-sal-hi"></div></div><span class="br-val" id="bv-sal-hi">—</span></div>
+  </div>
+
+  <div class="stat-card stat-breakdown">
+    <div class="breakdown-title">Exposure by Education</div>
+    <div class="breakdown-row"><span class="br-label">No degree</span><div class="br-bar-wrap"><div class="br-bar" id="bb-edu-0"></div></div><span class="br-val" id="bv-edu-0">—</span></div>
+    <div class="breakdown-row"><span class="br-label">College</span><div class="br-bar-wrap"><div class="br-bar" id="bb-edu-1"></div></div><span class="br-val" id="bv-edu-1">—</span></div>
+    <div class="breakdown-row"><span class="br-label">University</span><div class="br-bar-wrap"><div class="br-bar" id="bb-edu-2"></div></div><span class="br-val" id="bv-edu-2">—</span></div>
+    <div class="breakdown-row"><span class="br-label">Grad/Prof</span><div class="br-bar-wrap"><div class="br-bar" id="bb-edu-3"></div></div><span class="br-val" id="bv-edu-3">—</span></div>
+  </div>
+
+  <div class="stat-card stat-breakdown">
+    <div class="breakdown-title">Exposure by Gender</div>
+    <div class="breakdown-row"><span class="br-label">Female-dom</span><div class="br-bar-wrap"><div class="br-bar" id="bb-gen-f"></div></div><span class="br-val" id="bv-gen-f">—</span></div>
+    <div class="breakdown-row"><span class="br-label">Mixed</span><div class="br-bar-wrap"><div class="br-bar" id="bb-gen-m"></div></div><span class="br-val" id="bv-gen-m">—</span></div>
+    <div class="breakdown-row"><span class="br-label">Male-dom</span><div class="br-bar-wrap"><div class="br-bar" id="bb-gen-ma"></div></div><span class="br-val" id="bv-gen-ma">—</span></div>
+  </div>
+
+  <div id="stat-byline">AI score &gt; 50 / 100<br>Wages = hourly × 2,080 hrs<br>Gender from Stats Can LFS</div>
 </div>
 
 <div id="controls">
@@ -928,16 +994,65 @@ document.querySelectorAll(".mode-btn").forEach(btn => {
   });
 });
 
+// ─── Breakdown lookup tables ───────────────────────────────────────────────────
+// Education level: 0=no degree, 1=college/trades, 2=university, 3=grad/professional
+const NOC_EDU = {
+  "00":3,"10":2,"11":2,"12":1,"13":0,"14":1,
+  "20":2,"21":1,"30":3,"31":3,"32":1,"33":1,
+  "40":2,"41":3,"42":1,"43":1,"44":1,
+  "50":2,"51":1,"52":0,"53":0,
+  "60":0,"62":0,"63":0,"64":0,"65":0,"66":0,
+  "70":1,"72":1,"73":1,"74":0,"75":0,"76":0,
+  "80":1,"82":0,"84":0,
+  "90":1,"92":0,"94":0
+};
+
+// % female in each NOC group (approx. from Statistics Canada LFS gender data)
+const NOC_FEMALE = {
+  "00":35,"10":55,"11":55,"12":70,"13":80,"14":60,
+  "20":30,"21":25,"30":90,"31":75,"32":75,"33":85,
+  "40":70,"41":65,"42":20,"43":80,"44":70,
+  "50":45,"51":40,"52":40,"53":45,
+  "60":50,"62":50,"63":45,"64":65,"65":60,"66":55,
+  "70":5,"72":5,"73":5,"74":15,"75":10,"76":10,
+  "80":20,"82":25,"84":30,
+  "90":30,"92":30,"94":25
+};
+
+function scoreColor(s) {
+  // 0 → green #2ecc71, 100 → red #e74c3c
+  const t = s / 100;
+  const r = Math.round(46  + (231 - 46)  * t);
+  const g = Math.round(204 + (76  - 204) * t);
+  const b = Math.round(113 + (60  - 113) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
+function setBreakdown(barId, valId, score) {
+  document.getElementById(valId).textContent = score;
+  const el = document.getElementById(barId);
+  el.style.width = score + "%";
+  el.style.background = scoreColor(score);
+}
+
+function weightedAvg(filterFn) {
+  let sumScore = 0, sumEmp = 0;
+  raw.forEach(row => {
+    if (filterFn(row)) { sumScore += row[3] * row[4]; sumEmp += row[3]; }
+  });
+  return sumEmp ? Math.round(sumScore / sumEmp) : 0;
+}
+
 // ─── Stat strip ───────────────────────────────────────────────────────────────
 function populateStats() {
   const HIGH_THRESHOLD = 50;
   const HRS_PER_YEAR = 2080;
   let wagesB = 0, workersM = 0, totalM = 0;
   raw.forEach(([, , , emp, ai, wage]) => {
-    const empM = emp / 1000;        // thousands → millions
+    const empM = emp / 1000;
     totalM += empM;
     if (ai > HIGH_THRESHOLD) {
-      wagesB  += empM * 1e6 * wage * HRS_PER_YEAR / 1e9;  // → $B
+      wagesB   += empM * 1e6 * wage * HRS_PER_YEAR / 1e9;
       workersM += empM;
     }
   });
@@ -945,6 +1060,21 @@ function populateStats() {
   document.getElementById("stat-wages").textContent   = "$" + wagesB.toFixed(0) + "B";
   document.getElementById("stat-workers").textContent = workersM.toFixed(1) + "M";
   document.getElementById("stat-pct").textContent     = pct + "%";
+
+  // Salary breakdown
+  setBreakdown("bb-sal-lo","bv-sal-lo", weightedAvg(r => r[5] <  22));
+  setBreakdown("bb-sal-mi","bv-sal-mi", weightedAvg(r => r[5] >= 22 && r[5] <= 40));
+  setBreakdown("bb-sal-hi","bv-sal-hi", weightedAvg(r => r[5] >  40));
+
+  // Education breakdown
+  [0,1,2,3].forEach(lvl =>
+    setBreakdown(`bb-edu-${lvl}`, `bv-edu-${lvl}`,
+      weightedAvg(r => NOC_EDU[r[0]] === lvl)));
+
+  // Gender breakdown
+  setBreakdown("bb-gen-f",  "bv-gen-f",  weightedAvg(r => NOC_FEMALE[r[0]] >= 60));
+  setBreakdown("bb-gen-m",  "bv-gen-m",  weightedAvg(r => NOC_FEMALE[r[0]] >= 40 && NOC_FEMALE[r[0]] < 60));
+  setBreakdown("bb-gen-ma", "bv-gen-ma", weightedAvg(r => NOC_FEMALE[r[0]] <  40));
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
