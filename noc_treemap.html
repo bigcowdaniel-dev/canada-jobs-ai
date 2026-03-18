@@ -1,0 +1,962 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canadian NOC Occupations — AI Exposure & Wage Treemap</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f1117;
+      color: #e8eaf0;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    #header {
+      padding: 20px 32px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    #header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      color: #fff;
+    }
+    #header p {
+      margin-top: 5px;
+      font-size: 12.5px;
+      color: #8b8fa8;
+      line-height: 1.5;
+    }
+    #header .source {
+      margin-top: 3px;
+      font-size: 11px;
+      color: #4a4e64;
+    }
+
+    /* ── Controls bar ── */
+    #controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 32px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      flex-wrap: wrap;
+    }
+
+    /* Breadcrumb */
+    #breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12.5px;
+      color: #8b8fa8;
+      min-width: 0;
+    }
+    #breadcrumb .crumb {
+      cursor: pointer;
+      color: #7b9cff;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      white-space: nowrap;
+    }
+    #breadcrumb .crumb:hover { color: #a8bfff; }
+    #breadcrumb .sep { color: #3a3e54; }
+    #breadcrumb .current {
+      color: #e8eaf0;
+      cursor: default;
+      text-decoration: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 260px;
+    }
+
+    /* Search */
+    #search-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+    .search-icon {
+      position: absolute;
+      left: 9px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #4a4e64;
+      font-size: 13px;
+      pointer-events: none;
+      user-select: none;
+    }
+    #search {
+      background: #1a1d2e;
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 7px;
+      color: #e8eaf0;
+      padding: 6px 28px 6px 28px;
+      font-size: 12.5px;
+      width: 210px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      font-family: inherit;
+    }
+    #search:focus {
+      border-color: rgba(123,156,255,0.5);
+      box-shadow: 0 0 0 3px rgba(123,156,255,0.08);
+    }
+    #search::placeholder { color: #3a3e54; }
+    #search-clear {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #4a4e64;
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      display: none;
+      user-select: none;
+    }
+    #search-clear.visible { display: block; }
+    #search-clear:hover { color: #8b8fa8; }
+    #search-count {
+      position: absolute;
+      right: -8px;
+      bottom: -16px;
+      font-size: 10px;
+      color: #7b9cff;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    /* Mode toggle */
+    #mode-toggle {
+      display: flex;
+      background: #13151f;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .mode-btn {
+      padding: 5px 13px;
+      border: none;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      background: transparent;
+      color: #5a5e74;
+      transition: all 0.15s;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .mode-btn.active {
+      background: #252840;
+      color: #e8eaf0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .mode-btn:hover:not(.active) { color: #9b9fc0; }
+
+    /* Legend */
+    #legend {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    #legend-label {
+      font-size: 11px;
+      color: #8b8fa8;
+      white-space: nowrap;
+    }
+    #legend-track {
+      width: 130px;
+    }
+    #legend-bar {
+      width: 130px;
+      height: 9px;
+      border-radius: 5px;
+    }
+    .legend-ends {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #4a4e64;
+      margin-top: 2px;
+    }
+
+    /* Stats */
+    #stats {
+      font-size: 11.5px;
+      color: #c0c4dc;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* ── Chart ── */
+    #chart-container {
+      position: relative;
+      width: 100%;
+      height: calc(100vh - 228px);
+      min-height: 480px;
+    }
+    #treemap-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Nodes */
+    .node { cursor: pointer; }
+    .node rect {
+      stroke: #0f1117;
+      stroke-width: 1.5px;
+    }
+    .node:hover rect {
+      stroke: rgba(255,255,255,0.25);
+      stroke-width: 2px;
+    }
+    .node text {
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+    }
+    .category-label {
+      fill: rgba(255,255,255,0.6);
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      pointer-events: none;
+    }
+    .leaf-badge {
+      fill: rgba(255,255,255,0.5);
+      font-size: 9px;
+    }
+
+    /* ── Tooltip ── */
+    #tooltip {
+      position: fixed;
+      background: rgba(14,16,28,0.97);
+      border: 1px solid rgba(255,255,255,0.11);
+      border-radius: 9px;
+      padding: 13px 15px;
+      font-size: 13px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.1s;
+      width: 300px;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.6);
+      z-index: 100;
+    }
+    .tt-noc { font-size: 10px; color: #4a4e64; margin-bottom: 2px; }
+    .tt-name { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.3; margin-bottom: 5px; }
+    .tt-cat  { font-size: 11px; color: #6b6f88; margin-bottom: 10px; }
+    .tt-divider { height: 1px; background: rgba(255,255,255,0.07); margin: 8px 0; }
+    .tt-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 2px;
+    }
+    .tt-key { font-size: 11px; color: #8b8fa8; }
+    .tt-val { font-size: 13px; font-weight: 600; }
+    .tt-bar-wrap { margin: 5px 0 2px; }
+    .tt-bar { height: 5px; border-radius: 3px; background: #1e2030; margin-bottom: 2px; }
+    .tt-fill { height: 100%; border-radius: 3px; }
+    .tt-risk {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+    .tt-jobs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 0;
+    }
+    .tt-job {
+      font-size: 10.5px;
+      background: rgba(255,255,255,0.07);
+      color: #9b9fc0;
+      border-radius: 4px;
+      padding: 2px 6px;
+      line-height: 1.4;
+    }
+    .tt-job-match {
+      background: rgba(123,156,255,0.15);
+      color: #c0ccff;
+    }
+    .tt-job-more {
+      color: #5a5e74;
+      background: transparent;
+      padding-left: 2px;
+    }
+
+    /* ── Stat strip ── */
+    #stat-strip {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      padding: 0 32px;
+      background: #0b0d16;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 13px 28px 13px 0;
+      margin-right: 28px;
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }
+    .stat-card:last-of-type {
+      border-right: none;
+    }
+    .stat-num {
+      font-size: 34px;
+      font-weight: 700;
+      letter-spacing: -1.5px;
+      line-height: 1;
+      color: #e8eaf0;
+    }
+    .stat-num.accent {
+      background: linear-gradient(120deg, #ff6b6b 0%, #ffa94d 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: #5a5e74;
+      line-height: 1.45;
+      margin-top: 3px;
+    }
+    #stat-byline {
+      margin-left: auto;
+      font-size: 10.5px;
+      color: #363a52;
+      text-align: right;
+      line-height: 1.5;
+      flex-shrink: 0;
+    }
+
+    /* ── Hint ── */
+    .hint {
+      position: absolute;
+      bottom: 12px;
+      right: 18px;
+      font-size: 11px;
+      color: #2a2e44;
+      pointer-events: none;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Canadian NOC Occupations — AI Exposure &amp; Wage Treemap</h1>
+  <p>Block size = employment (Statistics Canada LFS 2023). Toggle colour between <strong style="color:#e8eaf0">AI exposure</strong> and <strong style="color:#e8eaf0">median hourly wage</strong>. Search to highlight matching groups.</p>
+  <div class="source">Sources: Statistics Canada LFS 2023 · NOC 2021 · AI exposure scores by claude-haiku-4-5 (live) · Wages from LFS Table 14-10-0064-01</div>
+</div>
+
+<div id="stat-strip">
+  <div class="stat-card"><span class="stat-num accent" id="stat-wages">—</span><span class="stat-label">in annual wages<br>at high AI exposure (&gt;50)</span></div>
+  <div class="stat-card"><span class="stat-num" id="stat-workers">—</span><span class="stat-label">Canadians in<br>high-exposure roles</span></div>
+  <div class="stat-card"><span class="stat-num" id="stat-pct">—</span><span class="stat-label">of the total<br>workforce</span></div>
+  <div id="stat-byline">AI score &gt; 50 / 100<br>Wages = hourly × 2,080 hrs</div>
+</div>
+
+<div id="controls">
+  <div id="breadcrumb">
+    <span class="crumb current" id="crumb-root">All Occupations</span>
+  </div>
+
+  <div id="search-wrap">
+    <span class="search-icon">⌕</span>
+    <input id="search" type="search" placeholder="Search occupations…" autocomplete="off" spellcheck="false">
+    <span id="search-clear" title="Clear">×</span>
+    <span id="search-count"></span>
+  </div>
+
+  <div id="mode-toggle">
+    <button class="mode-btn active" data-mode="ai">🤖 AI Exposure</button>
+    <button class="mode-btn"        data-mode="wage">💰 Median Wage</button>
+  </div>
+
+  <div id="legend">
+    <span id="legend-label">AI Exposure:</span>
+    <div id="legend-track">
+      <div id="legend-bar"></div>
+      <div class="legend-ends">
+        <span id="legend-lo">Low (0)</span>
+        <span id="legend-hi">High (100)</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="stats"></div>
+</div>
+
+<div id="chart-container">
+  <svg id="treemap-svg"></svg>
+  <div class="hint">Click a category to zoom in · Click background to zoom out</div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// ─── Data ──────────────────────────────────────────────────────────────────────
+// Columns: NOC code, name, broad-category (1-digit), employment (thousands),
+//          AI exposure (0–100), median hourly wage (CAD, 2023)
+
+const raw = [
+  ["00", "Legislators and senior management",                         "0",  580, 62, 62],
+  ["10", "Financial and business management",                         "1",  450, 68, 52],
+  ["11", "Professional occupations in business and finance",          "1",  840, 72, 47],
+  ["12", "Administrative and financial supervisors",                  "1",  680, 74, 34],
+  ["13", "Office support occupations",                                "1",  820, 79, 23],
+  ["14", "Distribution, tracking and scheduling coordination",        "1",  310, 71, 26],
+  ["20", "Professional occupations in natural and applied sciences",  "2",  960, 48, 51],
+  ["21", "Technical occupations in natural and applied sciences",     "2",  470, 54, 37],
+  ["30", "Professional occupations in nursing",                       "3",  420, 31, 41],
+  ["31", "Professional occupations in therapy and assessment",        "3",  280, 37, 40],
+  ["32", "Technical occupations in health",                           "3",  380, 41, 32],
+  ["33", "Assisting occupations in health services",                  "3",  400, 24, 21],
+  ["40", "Professional occupations in education",                     "4",  620, 45, 43],
+  ["41", "Professional occupations in law and social services",       "4",  760, 58, 37],
+  ["42", "Front-line public protection services",                     "4",  290, 28, 44],
+  ["43", "Care providers and educational, legal support",             "4",  850, 26, 21],
+  ["44", "Service and support in government, education and law",      "4",  180, 52, 28],
+  ["50", "Professional occupations in art and culture",               "5",  210, 39, 34],
+  ["51", "Technical occupations in art, culture and sport",           "5",  250, 36, 27],
+  ["52", "Sport, recreation and fitness occupations",                 "5",  140,  19, 20],
+  ["53", "Creative and performing artists",                           "5",   85, 22, 24],
+  ["60", "Retail sales supervisors and specialized sales",            "6",  520, 61, 22],
+  ["62", "Service supervisors and specialized service",               "6",  680, 57, 20],
+  ["63", "Sales representatives and salespersons",                    "6",  620, 53, 27],
+  ["64", "Service representatives and personal services",             "6",  870, 48, 18],
+  ["65", "Sales support occupations",                                 "6",  580, 75, 17],
+  ["66", "Service support and other service occupations",             "6", 1150, 46, 16],
+  ["70", "Trades supervisors and contractors",                        "7",  210, 36, 37],
+  ["72", "Industrial, electrical and construction trades",            "7",  890, 12, 33],
+  ["73", "Maintenance and equipment operation trades",                "7",  540, 18, 29],
+  ["74", "Other installers, repairers and material handlers",         "7",  370, 20, 24],
+  ["75", "Transport and heavy equipment operation",                   "7",  680, 25, 27],
+  ["76", "Trades helpers and labourers",                              "7",  310, 17, 22],
+  ["80", "Supervisors in natural resources and agriculture",          "8",   95, 32, 29],
+  ["82", "Workers in natural resources",                              "8",  180, 14, 25],
+  ["84", "Harvesting, landscaping and natural resources labourers",   "8",  120, 11, 18],
+  ["90", "Processing, manufacturing and utilities supervisors",       "9",  380, 63, 27],
+  ["92", "Industrial processing and manufacturing occupations",       "9",  520, 41, 22],
+  ["94", "Labourers in processing, manufacturing and utilities",      "9",  200, 19, 19],
+];
+
+// ─── Job title lookup ─────────────────────────────────────────────────────────
+// Representative job titles within each NOC 2021 major group.
+// Used to make search work for real occupations (e.g. "nurse", "electrician").
+const NOC_JOBS = {
+  "00": ["CEO","president","prime minister","minister","governor","mayor","deputy minister","executive director","VP","vice president","chief executive","managing director","commissioner","chancellor","elected official"],
+  "10": ["financial manager","CFO","chief financial officer","controller","treasurer","budget analyst","investment manager","bank manager","portfolio manager","credit manager","insurance manager","real estate manager"],
+  "11": ["accountant","CPA","auditor","financial analyst","economist","HR manager","human resources","marketing manager","management consultant","business analyst","actuary","underwriter","insurance agent","pension analyst","benefits administrator","recruiter"],
+  "12": ["office manager","administrative supervisor","payroll supervisor","payroll clerk","accounts payable","accounts receivable","executive assistant","secretary","administrative coordinator"],
+  "13": ["data entry clerk","bookkeeper","receptionist","administrative assistant","billing clerk","records clerk","office clerk","file clerk","customer service clerk","mail clerk","word processor"],
+  "14": ["dispatcher","scheduler","logistics coordinator","supply chain coordinator","customs broker","purchasing agent","shipping coordinator","freight broker","inventory planner","import export"],
+  "20": ["engineer","software developer","programmer","software engineer","web developer","geologist","chemist","physicist","architect","urban planner","data scientist","statistician","biologist","environmental scientist","mechanical engineer","civil engineer","electrical engineer","chemical engineer","aerospace engineer","systems analyst","network engineer","DevOps","cybersecurity","IT manager","database administrator","GIS analyst","hydrologist","meteorologist","petroleum engineer","renewable energy engineer","wind energy engineer","wind power engineer","solar engineer","solar energy engineer","clean energy analyst","energy systems engineer","sustainability engineer","energy modeller","power systems engineer","grid engineer","battery storage engineer","hydrogen engineer","bioenergy engineer","geothermal engineer","tidal energy engineer"],
+  "21": ["engineering technician","lab technician","IT support","network technician","drafting technician","surveyor","geomatics technician","chemical technician","geological technician","biological technician","technical support","help desk","computer support","electronics technician","industrial technician","quality control technician","wind turbine technician","solar panel technician","renewable energy technician","energy technician","photovoltaic technician","PV technician","wind farm technician","smart grid technician","power line technician","electrical technician"],
+  "30": ["nurse","registered nurse","RN","nurse practitioner","NP","clinical nurse specialist","neonatal nurse","surgical nurse","ER nurse","ICU nurse","public health nurse","psychiatric nurse","licensed practical nurse","LPN"],
+  "31": ["physiotherapist","physical therapist","occupational therapist","speech therapist","speech-language pathologist","psychologist","audiologist","dietitian","pharmacist","optometrist","chiropractor","naturopath","massage therapist","midwife","social worker","clinical psychologist","rehabilitation therapist","kinesiologist"],
+  "32": ["medical technologist","radiation therapist","radiologist technician","paramedic","emergency medical technician","EMT","dental hygienist","respiratory therapist","ultrasound technician","X-ray technician","MRI technician","medical laboratory technician","pharmacy technician","optician","prosthetics technician","cardiology technician"],
+  "33": ["nursing aide","personal support worker","PSW","health care aide","dental assistant","pharmacy assistant","hospital orderly","home support worker","home care worker","continuing care assistant","patient care aide","medical office assistant","veterinary assistant","optical assistant"],
+  "40": ["teacher","elementary teacher","high school teacher","professor","lecturer","instructor","principal","vice principal","school counselor","guidance counselor","early childhood educator","ECE","librarian","library technician","special education teacher","ESL teacher","professor","university instructor","college professor","tutor"],
+  "41": ["lawyer","attorney","social worker","judge","justice of the peace","paralegal","probation officer","parole officer","policy analyst","immigration officer","employment counselor","career counselor","family counselor","community worker","welfare officer","child protection worker","court officer","human rights officer","union representative","refugee officer"],
+  "42": ["police officer","RCMP","firefighter","correctional officer","prison guard","border services officer","CBSA","coast guard","bylaw enforcement","sheriff","detective","investigator","security intelligence","customs officer","fish and wildlife officer"],
+  "43": ["childcare worker","daycare worker","nanny","babysitter","educational assistant","EA","teaching assistant","legal assistant","law clerk","community support worker","social services worker","shelter worker","family support worker","youth worker","Indigenous support worker","settlement worker"],
+  "44": ["court clerk","government clerk","licensing officer","land registry clerk","licence examiner","government service officer","passport officer","elections officer","taxation officer"],
+  "50": ["journalist","reporter","editor","writer","author","copywriter","content writer","graphic designer","photographer","videographer","curator","archivist","translator","interpreter","public relations","communications officer","technical writer","web content","librarian","museum technician"],
+  "51": ["audio engineer","sound technician","video editor","broadcast technician","film crew","animator","3D artist","web designer","UI designer","UX designer","game developer","set designer","lighting technician","camera operator","studio technician","sports broadcaster","radio technician","drone operator"],
+  "52": ["personal trainer","fitness instructor","recreation coordinator","sports coach","coach","lifeguard","aquatics instructor","camp counselor","recreation worker","yoga instructor","aerobics instructor","ski instructor","tennis coach","swimming instructor","arena attendant"],
+  "53": ["actor","musician","dancer","singer","comedian","painter","sculptor","illustrator","cartoonist","tattoo artist","makeup artist","circus performer","stunt performer","art director","creative director","fashion designer","jewellery designer"],
+  "60": ["retail manager","store manager","car salesperson","auto sales","real estate agent","realtor","insurance broker","financial advisor","investment advisor","mortgage broker","sales manager","territory manager","pharmaceutical sales","medical sales representative","advertising sales"],
+  "62": ["restaurant manager","food service supervisor","hairdresser","hair stylist","esthetician","beautician","nail technician","spa manager","chef","head chef","sous chef","baker","pastry chef","catering supervisor","dry cleaner supervisor","funeral director"],
+  "63": ["sales representative","account manager","outside sales","retail salesperson","door to door sales","telemarketer","wholesale sales","inside sales","sales associate","vendor"],
+  "64": ["customer service representative","call centre agent","bank teller","ticket agent","travel agent","flight attendant","hotel clerk","front desk","concierge","car rental agent","tour guide","funeral home assistant","pet groomer","hairstylist","barber"],
+  "65": ["cashier","sales clerk","retail worker","gas station attendant","rental agent","checkout clerk","box office attendant","lottery ticket retailer","vending machine attendant"],
+  "66": ["food counter worker","fast food worker","waiter","waitress","server","bartender","barista","housekeeper","hotel cleaner","janitor","cleaner","custodian","building superintendent","security guard","crossing guard","garbage collector","recycling worker","laundry worker","valet"],
+  "70": ["general contractor","construction supervisor","foreman","plumbing contractor","electrical contractor","HVAC contractor","roofing contractor","renovation contractor","project supervisor","site supervisor","trades foreman"],
+  "72": ["electrician","plumber","carpenter","welder","ironworker","pipefitter","millwright","boilermaker","sheet metal worker","heavy duty mechanic","industrial mechanic","crane operator","sprinkler fitter","steamfitter","gasfitter","roofer","bricklayer","concrete worker","tile setter","plasterer","drywaller","insulator","glazier","elevator mechanic","refrigeration mechanic","wind turbine installer","solar panel installer","solar installer","renewable energy installer","photovoltaic installer","wind turbine erector","power line installer","transmission line worker"],
+  "73": ["mechanic","auto mechanic","HVAC technician","appliance repair technician","industrial machinery mechanic","aircraft maintenance engineer","AME","marine mechanic","small engine mechanic","agricultural equipment mechanic","building systems technician","bus mechanic","diesel mechanic","wind turbine mechanic","wind turbine service technician","solar system maintainer","renewable energy mechanic","turbine maintenance","hydroelectric mechanic","power plant mechanic"],
+  "74": ["machinist","tool and die maker","material handler","forklift operator","warehouse picker","packer","heavy equipment operator","jack of all trades","general maintenance","locksmith","watch repair","upholstery repair","rigger","signal person"],
+  "75": ["truck driver","long haul driver","bus driver","transit driver","taxi driver","Uber driver","Lyft driver","delivery driver","courier","pilot","commercial pilot","train operator","locomotive engineer","subway operator","ferry operator","ship captain","deep sea captain","forklift operator","crane operator","excavator operator","bulldozer operator","dump truck driver","ambulance driver"],
+  "76": ["construction labourer","general labourer","plumber helper","electrician helper","drywall helper","mover","demolition worker","road crew","pipeline labourer","oil sands labourer","landscaping labourer","traffic control worker"],
+  "80": ["farm supervisor","logging supervisor","mine supervisor","fishery supervisor","greenhouse supervisor","orchard supervisor","fish plant supervisor","sawmill supervisor","agriculture supervisor"],
+  "82": ["miner","underground miner","coal miner","driller","blaster","oil field worker","roughneck","rig technician","fisher","commercial fisher","logger","tree faller","forestry worker","farmer","grain farmer","livestock farmer","rancher","beekeeper","trapper","wind farm worker","solar farm worker","renewable energy worker","hydroelectric worker","biomass worker","clean energy worker"],
+  "84": ["farmworker","crop harvester","fruit picker","berry picker","greenhouse worker","nursery worker","landscaper","groundskeeper","lawn care worker","tree planter","silviculture worker","irrigation worker"],
+  "90": ["manufacturing supervisor","plant supervisor","production supervisor","utilities supervisor","water treatment supervisor","power plant supervisor","food processing supervisor","textile supervisor","chemical plant supervisor"],
+  "92": ["machine operator","CNC operator","food processing worker","meat cutter","slaughterhouse worker","textile worker","rubber worker","plastics worker","chemical plant operator","power plant operator","water treatment operator","oil refinery operator","paper mill operator","printing press operator"],
+  "94": ["factory worker","assembly line worker","assembly worker","packer","sorter","warehouse worker","production line worker","material handler","food factory worker","bottling plant worker","cannery worker"],
+};
+
+const BROAD_NAMES = {
+  "0": "0 · Legislative & Senior Mgmt",
+  "1": "1 · Business, Finance & Admin",
+  "2": "2 · Natural & Applied Sciences",
+  "3": "3 · Health",
+  "4": "4 · Education, Law & Social",
+  "5": "5 · Art, Culture & Sport",
+  "6": "6 · Sales & Service",
+  "7": "7 · Trades & Transport",
+  "8": "8 · Natural Resources & Agri.",
+  "9": "9 · Manufacturing & Utilities",
+};
+
+function buildHierarchy(rows) {
+  const byBroad = {};
+  for (const [code, name, broad, emp, ai, wage] of rows) {
+    if (!byBroad[broad]) byBroad[broad] = [];
+    byBroad[broad].push({ code, name, broad, emp, ai, wage, jobs: NOC_JOBS[code] || [] });
+  }
+  return {
+    name: "Canadian NOC Occupations",
+    children: Object.entries(byBroad).map(([b, groups]) => ({
+      name: BROAD_NAMES[b],
+      broad: b,
+      children: groups,
+    })),
+  };
+}
+
+// ─── Color scales ──────────────────────────────────────────────────────────────
+const aiScale = d3.scaleSequential()
+  .domain([0, 100])
+  .interpolator(d3.interpolateRgb("#2ecc71", "#e74c3c"))
+  .clamp(true);
+
+const wageScale = d3.scaleSequential()
+  .domain([15, 65])
+  .interpolator(d3.interpolateRgb("#1565c0", "#fdd835"))
+  .clamp(true);
+
+const LEGEND_CFG = {
+  ai:   { label: "AI Exposure:", gradient: "linear-gradient(to right,#2ecc71,#f1c40f,#e74c3c)", lo: "Low (0)",  hi: "High (100)" },
+  wage: { label: "Median Wage:", gradient: "linear-gradient(to right,#1565c0,#43a6e8,#fdd835)",  lo: "$15/hr",  hi: "$65/hr"   },
+};
+
+function riskLabel(score) {
+  if (score < 25) return { label: "LOW",       color: "#2ecc71" };
+  if (score < 50) return { label: "MEDIUM",    color: "#f1c40f" };
+  if (score < 75) return { label: "HIGH",      color: "#e67e22" };
+  return              { label: "VERY HIGH",   color: "#e74c3c" };
+}
+
+function wageLabel(w) {
+  if (w < 20) return { label: "BELOW AVERAGE", color: "#5b8dd6" };
+  if (w < 30) return { label: "AVERAGE",       color: "#7bbce0" };
+  if (w < 42) return { label: "ABOVE AVERAGE", color: "#b8d96e" };
+  return              { label: "HIGH WAGE",    color: "#fdd835" };
+}
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let colorMode   = "ai";
+let searchQuery = "";
+let currentRoot = null;
+let svgLeaves   = null;   // persistent D3 selection of leaf <g> nodes
+
+// ─── Legend updater ───────────────────────────────────────────────────────────
+function updateLegend() {
+  const cfg = LEGEND_CFG[colorMode];
+  document.getElementById("legend-label").textContent = cfg.label;
+  document.getElementById("legend-bar").style.background = cfg.gradient;
+  document.getElementById("legend-lo").textContent = cfg.lo;
+  document.getElementById("legend-hi").textContent = cfg.hi;
+}
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+function applySearch() {
+  if (!svgLeaves) return;
+  const q = searchQuery.trim().toLowerCase();
+  const countEl = document.getElementById("search-count");
+  const clearEl = document.getElementById("search-clear");
+
+  clearEl.classList.toggle("visible", q.length > 0);
+
+  if (!q) {
+    svgLeaves
+      .transition().duration(180)
+      .attr("opacity", 1);
+    svgLeaves.select("rect")
+      .transition().duration(180)
+      .attr("stroke", "#0f1117")
+      .attr("stroke-width", 1.5);
+    countEl.textContent = "";
+    return;
+  }
+
+  let matchCount = 0;
+  svgLeaves.each(function(d) {
+    const haystack = [d.data.name, d.data.code, BROAD_NAMES[d.data.broad], ...(d.data.jobs || [])]
+      .join(" ").toLowerCase();
+    const match = haystack.includes(q);
+    if (match) matchCount++;
+
+    d3.select(this)
+      .transition().duration(180)
+      .attr("opacity", match ? 1 : 0.09);
+
+    d3.select(this).select("rect")
+      .transition().duration(180)
+      .attr("stroke",       match ? "rgba(255,255,255,0.55)" : "#0f1117")
+      .attr("stroke-width", match ? 2.5 : 1.5);
+  });
+
+  countEl.textContent = matchCount === 0 ? "no matches" : `${matchCount} match${matchCount > 1 ? "es" : ""}`;
+}
+
+// ─── Tooltip ──────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById("tooltip");
+
+function showTooltip(event, d) {
+  const { code, name, broad, emp, ai, wage, jobs } = d.data;
+  const broadName = BROAD_NAMES[broad] || broad;
+  const risk = riskLabel(ai);
+  const wl   = wageLabel(wage);
+  const aiPct  = ai;
+  const wagePct = Math.round(((wage - 15) / (65 - 15)) * 100);
+  const aiColor   = aiScale(ai);
+  const wageColor = wageScale(wage);
+
+  const aiStyle   = colorMode === "ai"   ? "font-size:13px;font-weight:700;" : "font-size:12px;";
+  const wageStyle = colorMode === "wage" ? "font-size:13px;font-weight:700;" : "font-size:12px;";
+
+  // When searching, highlight which job titles matched
+  const q = searchQuery.trim().toLowerCase();
+  let jobsHtml = "";
+  if (jobs && jobs.length) {
+    if (q) {
+      const matched   = jobs.filter(j => j.toLowerCase().includes(q));
+      const unmatched = jobs.filter(j => !j.toLowerCase().includes(q)).slice(0, 4);
+      if (matched.length) {
+        const chips = matched.map(j => {
+          const hi = j.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")})`, "gi"),
+            "<mark style='background:rgba(123,156,255,0.35);color:#fff;border-radius:2px;padding:0 2px'>$1</mark>");
+          return `<span class="tt-job tt-job-match">${hi}</span>`;
+        }).join("");
+        const moreUnmatched = unmatched.map(j => `<span class="tt-job">${j}</span>`).join("");
+        const extra = jobs.length - matched.length - unmatched.length;
+        jobsHtml = `<div class="tt-divider"></div>
+          <div class="tt-key" style="margin-bottom:4px">Roles in this group</div>
+          <div class="tt-jobs">${chips}${moreUnmatched}${extra > 0 ? `<span class="tt-job tt-job-more">+${extra} more</span>` : ""}</div>`;
+      }
+    } else {
+      // No search — show a sample of job titles
+      const sample = jobs.slice(0, 6).map(j => `<span class="tt-job">${j}</span>`).join("");
+      const extra  = jobs.length - 6;
+      jobsHtml = `<div class="tt-divider"></div>
+        <div class="tt-key" style="margin-bottom:4px">Example roles</div>
+        <div class="tt-jobs">${sample}${extra > 0 ? `<span class="tt-job tt-job-more">+${extra} more</span>` : ""}</div>`;
+    }
+  }
+
+  tooltip.innerHTML = `
+    <div class="tt-noc">NOC ${code}</div>
+    <div class="tt-name">${name}</div>
+    <div class="tt-cat">${broadName}</div>
+    <div class="tt-row">
+      <span class="tt-key">Employment</span>
+      <span class="tt-val">${(emp * 1000).toLocaleString()}</span>
+    </div>
+    <div class="tt-divider"></div>
+    <div class="tt-row">
+      <span class="tt-key">AI Exposure Score</span>
+      <span style="${aiStyle}color:${aiColor}">${ai}/100</span>
+    </div>
+    <div class="tt-bar-wrap">
+      <div class="tt-bar"><div class="tt-fill" style="width:${aiPct}%;background:${aiColor}"></div></div>
+      <div class="tt-risk" style="color:${risk.color}">${risk.label} EXPOSURE</div>
+    </div>
+    <div class="tt-divider"></div>
+    <div class="tt-row">
+      <span class="tt-key">Median Hourly Wage</span>
+      <span style="${wageStyle}color:${wageColor}">$${wage}/hr</span>
+    </div>
+    <div class="tt-bar-wrap">
+      <div class="tt-bar"><div class="tt-fill" style="width:${wagePct}%;background:${wageColor}"></div></div>
+      <div class="tt-risk" style="color:${wl.color}">${wl.label}</div>
+    </div>
+    ${jobsHtml}
+  `;
+  tooltip.style.opacity = "1";
+  positionTooltip(event);
+}
+
+function positionTooltip(event) {
+  const TW = 306, TH = 300;
+  const { innerWidth: vw, innerHeight: vh } = window;
+  let x = event.clientX + 15;
+  let y = event.clientY + 15;
+  if (x + TW > vw - 8) x = event.clientX - TW - 15;
+  if (y + TH > vh - 8) y = event.clientY - TH - 15;
+  tooltip.style.left = x + "px";
+  tooltip.style.top  = y + "px";
+}
+
+function hideTooltip() { tooltip.style.opacity = "0"; }
+
+// ─── Treemap layout ───────────────────────────────────────────────────────────
+const svgEl    = d3.select("#treemap-svg");
+const chartDiv = document.getElementById("chart-container");
+
+function getSize() {
+  return [chartDiv.clientWidth, chartDiv.clientHeight];
+}
+
+function layoutTreemap(data, [W, H]) {
+  const hier = d3.hierarchy(data)
+    .sum(d => d.emp || 0)
+    .sort((a, b) => b.value - a.value);
+  d3.treemap()
+    .size([W, H])
+    .paddingOuter(6)
+    .paddingTop(22)
+    .paddingInner(2)
+    .round(true)(hier);
+  return hier;
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function render(focusNode) {
+  svgEl.selectAll("*").remove();
+  const [W, H] = getSize();
+
+  const data = focusNode
+    ? { name: focusNode.data.name, children: focusNode.data.children }
+    : buildHierarchy(raw);
+
+  const root = layoutTreemap(data, [W, H]);
+
+  // Stats
+  const leafCount = root.descendants().filter(d => !d.children).length;
+  document.getElementById("stats").textContent =
+    `${leafCount} groups · ${(root.value * 1000).toLocaleString()} employed`;
+
+  // Background click → zoom out
+  svgEl.on("click", () => { if (focusNode) zoomOut(); });
+
+  const allNodes = root.descendants().filter(d => d.depth > 0);
+
+  const nodeG = svgEl.selectAll(".node")
+    .data(allNodes)
+    .enter()
+    .append("g")
+    .attr("class", "node")
+    .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+  const nw = d => d.x1 - d.x0;
+  const nh = d => d.y1 - d.y0;
+
+  // Active color function
+  function leafColor(d) {
+    if (colorMode === "wage") return wageScale(d.data.wage);
+    return aiScale(d.data.ai);
+  }
+
+  // Rectangles
+  nodeG.append("rect")
+    .attr("width",  d => Math.max(0, nw(d) - 0.5))
+    .attr("height", d => Math.max(0, nh(d) - 0.5))
+    .attr("rx", 2)
+    .attr("fill",    d => d.children ? "#191c2c" : leafColor(d))
+    .attr("opacity", d => d.children ? 1 : 0.9);
+
+  // Category header labels
+  nodeG.filter(d => d.depth === 1 && d.children)
+    .append("text")
+    .attr("class", "category-label")
+    .attr("x", 5).attr("y", 14)
+    .text(d => {
+      const avail = nw(d) - 10;
+      if (avail < 60) return "";
+      const ch = Math.floor(avail / 6.8);
+      const t = d.data.name;
+      return t.length > ch ? t.slice(0, ch - 1) + "…" : t;
+    });
+
+  // Leaf labels + badge
+  const leaves = nodeG.filter(d => !d.children);
+
+  leaves.each(function(d) {
+    const dw = nw(d), dh = nh(d), area = dw * dh;
+    if (area < 700 || dw < 28 || dh < 18) return;
+
+    const g = d3.select(this);
+    const name = d.data.name;
+    const maxChars = Math.floor(dw / 7.2);
+    const maxLines = Math.max(1, Math.floor((dh - 20) / 13));
+
+    // Word-wrap
+    const words = name.split(" ");
+    const lines = [];
+    let cur = "";
+    for (const word of words) {
+      const cand = cur ? cur + " " + word : word;
+      if (cand.length > maxChars) {
+        if (cur) lines.push(cur);
+        cur = word;
+      } else {
+        cur = cand;
+      }
+      if (lines.length >= maxLines) break;
+    }
+    if (cur && lines.length < maxLines) lines.push(cur);
+
+    const lineH = 13;
+    const totalH = lines.length * lineH;
+    const hasBadge = dh > 46 && dw > 46;
+    const textAreaH = dh - (hasBadge ? 16 : 4);
+    const startY = Math.max(8, (textAreaH - totalH) / 2);
+    const fontSize = area > 7000 ? "11px" : "9.5px";
+    const fontWeight = area > 7000 ? "500" : "400";
+
+    lines.forEach((line, i) => {
+      g.append("text")
+        .attr("x", dw / 2)
+        .attr("y", startY + i * lineH + 10)
+        .attr("text-anchor", "middle")
+        .attr("fill", "rgba(255,255,255,0.93)")
+        .attr("font-size", fontSize)
+        .attr("font-weight", fontWeight)
+        .text(line);
+    });
+
+    if (hasBadge) {
+      const badgeText = colorMode === "wage"
+        ? `$${d.data.wage}/hr`
+        : `AI: ${d.data.ai}`;
+      g.append("text")
+        .attr("class", "leaf-badge")
+        .attr("x", dw / 2)
+        .attr("y", dh - 6)
+        .attr("text-anchor", "middle")
+        .text(badgeText);
+    }
+  });
+
+  // Store leaf selection for search
+  svgLeaves = leaves;
+
+  // Leaf interactions
+  leaves
+    .on("mousemove",  (ev, d) => { showTooltip(ev, d); positionTooltip(ev); })
+    .on("mouseenter", (ev, d) => showTooltip(ev, d))
+    .on("mouseleave", hideTooltip)
+    .on("click", ev => ev.stopPropagation());
+
+  // Category click → zoom in
+  nodeG.filter(d => d.depth === 1 && d.children)
+    .on("click", (ev, d) => { ev.stopPropagation(); if (!focusNode) zoomIn(d); });
+
+  // Re-apply search state
+  applySearch();
+}
+
+// ─── Zoom ─────────────────────────────────────────────────────────────────────
+function zoomIn(node) {
+  currentRoot = node;
+  updateBreadcrumb(node.data.name);
+  render(node);
+}
+
+function zoomOut() {
+  currentRoot = null;
+  updateBreadcrumb(null);
+  render(null);
+}
+
+function updateBreadcrumb(category) {
+  const bc = document.getElementById("breadcrumb");
+  if (!category) {
+    bc.innerHTML = `<span class="crumb current" id="crumb-root">All Occupations</span>`;
+  } else {
+    bc.innerHTML = `
+      <span class="crumb" id="crumb-root">All Occupations</span>
+      <span class="sep">›</span>
+      <span class="current">${category}</span>
+    `;
+    document.getElementById("crumb-root").addEventListener("click", zoomOut);
+  }
+}
+
+// ─── Controls wiring ──────────────────────────────────────────────────────────
+
+// Search input
+const searchEl = document.getElementById("search");
+searchEl.addEventListener("input", () => {
+  searchQuery = searchEl.value;
+  applySearch();
+});
+searchEl.addEventListener("keydown", ev => {
+  if (ev.key === "Escape") {
+    searchEl.value = "";
+    searchQuery = "";
+    applySearch();
+  }
+});
+document.getElementById("search-clear").addEventListener("click", () => {
+  searchEl.value = "";
+  searchQuery = "";
+  applySearch();
+  searchEl.focus();
+});
+
+// Mode toggle
+document.querySelectorAll(".mode-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const newMode = btn.dataset.mode;
+    if (newMode === colorMode) return;
+    colorMode = newMode;
+    document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b === btn));
+    updateLegend();
+    render(currentRoot);
+  });
+});
+
+// ─── Stat strip ───────────────────────────────────────────────────────────────
+function populateStats() {
+  const HIGH_THRESHOLD = 50;
+  const HRS_PER_YEAR = 2080;
+  let wagesB = 0, workersM = 0, totalM = 0;
+  raw.forEach(([, , , emp, ai, wage]) => {
+    const empM = emp / 1000;        // thousands → millions
+    totalM += empM;
+    if (ai > HIGH_THRESHOLD) {
+      wagesB  += empM * 1e6 * wage * HRS_PER_YEAR / 1e9;  // → $B
+      workersM += empM;
+    }
+  });
+  const pct = (workersM / totalM * 100).toFixed(0);
+  document.getElementById("stat-wages").textContent   = "$" + wagesB.toFixed(0) + "B";
+  document.getElementById("stat-workers").textContent = workersM.toFixed(1) + "M";
+  document.getElementById("stat-pct").textContent     = pct + "%";
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+populateStats();
+updateLegend();
+render(null);
+
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => render(currentRoot), 120);
+});
+</script>
+</body>
+</html>
